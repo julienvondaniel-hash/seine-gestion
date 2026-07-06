@@ -300,10 +300,10 @@ function Patrimoine({ assets, wide = false, history = [], onAddSnapshot, onDelet
   const mob = assets.filter((a) => a.type === "mobilier").reduce((s, a) => s + a.value, 0);
   const imm = assets.filter((a) => a.type === "immobilier").reduce((s, a) => s + a.value, 0);
 
-  // Historique réel uniquement, issu des relevés datés de la valeur nette
+  // Historique réel uniquement, issu des relevés datés saisis par l'utilisateur
   // (net_worth_snapshots). Chaque relevé = un point de la courbe ; le dernier
-  // correspond à aujourd'hui. Sans historique (1er jour ou table absente),
-  // un seul point : la valeur d'aujourd'hui — aucune donnée passée inventée.
+  // point est le dernier relevé enregistré. Sans relevé encore saisi, un seul
+  // point : la valeur nette actuelle — aucune donnée inventée.
   const anneeCourante = new Date().getFullYear().toString();
   const chart = history.length > 0
     ? history.map((h) => ({ m: h.m, v: h.v, date: h.date }))
@@ -387,8 +387,8 @@ function Patrimoine({ assets, wide = false, history = [], onAddSnapshot, onDelet
         <Eyebrow>Suivi dans le temps</Eyebrow>
         <div style={{ fontSize: 12.5, color: C.ivorySoft, lineHeight: 1.55, marginBottom: 14 }}>
           Enregistrez la valeur nette de votre patrimoine à une date donnée pour bâtir la
-          courbe — vous pouvez aussi saisir des relevés antérieurs. Le relevé du jour reflète
-          automatiquement vos actifs actuels.
+          courbe — vous pouvez aussi saisir des relevés antérieurs. Aucun relevé n'est enregistré
+          automatiquement : seuls les points que vous ajoutez ici apparaissent.
         </div>
 
         {!adding ? (
@@ -993,26 +993,14 @@ export default function ClientApp({ tab = "patrimoine", setTab = () => {}, isDes
     );
   };
 
-  // Enregistre le relevé daté du jour (valeur nette) puis recharge l'historique,
-  // pour que l'onglet Patrimoine affiche la progression réelle dans le temps.
-  const syncHistory = async (mapped) => {
-    const gross = mapped.reduce((s, a) => s + a.value, 0);
-    const debt = mapped.reduce((s, a) => s + (a.debt || 0), 0);
-    // On n'enregistre un point que s'il existe au moins un actif (pas de 0 trompeur).
-    if (mapped.length > 0) {
-      await recordNetWorthSnapshot({ net: gross - debt, gross, debt });
-    }
-    await reloadHistory();
-  };
-
   const refresh = async () => {
     const { data, error } = await listAssets();
     if (!error && data) {
-      const mapped = data.map(fromDb);
-      setAssets(mapped);
-      // Best-effort : si la table d'historique n'existe pas encore côté Supabase,
-      // on ignore l'erreur et l'app continue (courbe réduite au point du jour).
-      try { await syncHistory(mapped); } catch (_) { /* historique indisponible */ }
+      setAssets(data.map(fromDb));
+      // Aucun enregistrement automatique : la courbe ne reflète que les relevés
+      // datés saisis par l'utilisateur. On se contente de (re)charger l'historique.
+      // Best-effort : si la table d'historique n'existe pas encore, on ignore l'erreur.
+      try { await reloadHistory(); } catch (_) { /* historique indisponible */ }
     }
     setLoading(false);
   };
